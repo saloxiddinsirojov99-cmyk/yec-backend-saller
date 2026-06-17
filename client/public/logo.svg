@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60">
+  <defs>
+    <linearGradient id="a" x1="0" y1="0" x2="100" y2="100">
+      <stop offset="0" stop-color="#1a56db"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="4" width="40" height="40" rx="10" fill="url(#a)"/>
+  <text x="22" y="32" font-family="Arial" font-size="24" font-weight="bold" fill="white" text-anchor="middle">Y</text>
+  <text x="52" y="30" font-family="Arial" font-size="26" font-weight="800" fill="url(#a)">YEC</text>
+  <text x="112" y="30" font-family="Arial" font-size="18" font-weight="600" fill="#64748b" letter-spacing="2">GILAM</text>
+  <text x="52" y="46" font-family="Arial" font-size="8" fill="#94a3b8" letter-spacing="1">SIFAT VA ISHONCH</text>
+</svg>

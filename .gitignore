@@ -7,3 +7,5 @@ dist/
 .DS_Store
 *.log
 yec_gilam.db
+
+.vercel
