@@ -28,11 +28,36 @@ function getAuthHeader() {
   };
 }
 
+/**
+ * Token yaroqsiz bo'lsa (403) tokenni o'chirib, foydalanuvchini login page'ga qaytarish
+ */
+function handleAuthError() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  // Agar window mavjud bo'lsa (browser) login page'ga redirect
+  if (typeof window !== 'undefined') {
+    window.location.href = '/login';
+  }
+}
+
 async function handleResponse(response) {
+  // 403 - yaroqsiz token
+  if (response.status === 403) {
+    handleAuthError();
+    throw new Error('Yaroqsiz token. Iltimos, qaytadan kiring.');
+  }
+  
+  // 401 - login xatolik
+  if (response.status === 401) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || errorData.error || 'Email yoki parol noto\'g\'ri.');
+  }
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || errorData.error || 'Tizim xatoligi yuz berdi.');
   }
+  
   const json = await response.json();
   if (json && json.success !== undefined) {
     if (!json.success) {
