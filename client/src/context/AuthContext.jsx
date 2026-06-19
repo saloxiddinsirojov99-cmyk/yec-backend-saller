@@ -3,7 +3,7 @@ import { loginUser, logoutUser } from '../services/api';
 
 const AuthContext = createContext();
 
-// Default super admin ma'lumotlari (backend ishlamaganda ishlatiladi)
+// Default super admin ma'lumotlari (backend BUTUNLAY ishlamaganda ishlatiladi)
 const DEFAULT_ADMIN = {
   email: 'admin@yecgilam.uz',
   password: 'admin123',
@@ -51,7 +51,7 @@ export function AuthProvider({ children }) {
     try {
       setError(null);
 
-      // 1. Avval backend'ga urinamiz
+      // Always try backend first
       try {
         const response = await loginUser(email, password);
         const { token, user: userData } = response;
@@ -62,28 +62,36 @@ export function AuthProvider({ children }) {
 
         return userData;
       } catch (apiErr) {
-        // 2. Backend ishlamasa, default admin/seller ma'lumotlarini tekshiramiz
-        console.warn('Backend login failed, trying default credentials:', apiErr.message);
+        // Backend dan real xatolik keldi (401, 403, 500) - xatolikni ko'rsatamiz
+        // Auto-login FAQAT tarmoq xatosi bo'lganda (Failed to fetch) ishlaydi
+        const isNetworkError = apiErr.message === 'Serverga ulanishda xatolik. Server ishlayotganligini tekshiring.';
+        
+        if (isNetworkError) {
+          console.warn('Backend unreachable, trying default credentials:', apiErr.message);
 
-        // Default admin tekshirish
-        if (email === DEFAULT_ADMIN.email && password === DEFAULT_ADMIN.password) {
-          localStorage.setItem('token', DEFAULT_ADMIN.token);
-          localStorage.setItem('user', JSON.stringify(DEFAULT_ADMIN.userData));
-          setUser(DEFAULT_ADMIN.userData);
-          console.log('✅ Default admin auto-login successful');
-          return DEFAULT_ADMIN.userData;
+          // Default admin tekshirish
+          if (email === DEFAULT_ADMIN.email && password === DEFAULT_ADMIN.password) {
+            localStorage.setItem('token', DEFAULT_ADMIN.token);
+            localStorage.setItem('user', JSON.stringify(DEFAULT_ADMIN.userData));
+            setUser(DEFAULT_ADMIN.userData);
+            console.log('✅ Default admin auto-login successful (offline mode)');
+            return DEFAULT_ADMIN.userData;
+          }
+
+          // Default seller tekshirish
+          if (email === DEFAULT_SELLER.email && password === DEFAULT_SELLER.password) {
+            localStorage.setItem('token', DEFAULT_SELLER.token);
+            localStorage.setItem('user', JSON.stringify(DEFAULT_SELLER.userData));
+            setUser(DEFAULT_SELLER.userData);
+            console.log('✅ Default seller auto-login successful (offline mode)');
+            return DEFAULT_SELLER.userData;
+          }
+
+          // Default emas va backend ishlamasa
+          throw new Error('Server bilan bog\'lanish yo\'q. Iltimos, keyinroq urinib ko\'ring.');
         }
 
-        // Default seller tekshirish
-        if (email === DEFAULT_SELLER.email && password === DEFAULT_SELLER.password) {
-          localStorage.setItem('token', DEFAULT_SELLER.token);
-          localStorage.setItem('user', JSON.stringify(DEFAULT_SELLER.userData));
-          setUser(DEFAULT_SELLER.userData);
-          console.log('✅ Default seller auto-login successful');
-          return DEFAULT_SELLER.userData;
-        }
-
-        // Agar default emas va backend ishlamasa - xatolik qaytaramiz
+        // Backend ishlayapti, real xatolik - uni ko'rsatamiz
         throw apiErr;
       }
     } catch (err) {
