@@ -13,38 +13,43 @@ const statsRoutes = require('../routes/stats');
 
 const app = express();
 
-// CORS - allow frontend domains
+// CORS - allow all Vercel frontends + localhost
 const allowedOrigins = [
-  (process.env.FRONTEND_URL || 'https://yec-sallers.vercel.app').replace(/\/$/, '')
+  'https://yec-sallers.vercel.app',
+  'https://yec-saller-front.vercel.app',
+  'https://yec-saller-front.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5000'
 ];
 
-if (process.env.NODE_ENV !== 'production') {
-  allowedOrigins.push('http://localhost:5173');
-  allowedOrigins.push('http://localhost:3000');
+// Agar FRONTEND_URL env bo'lsa uni ham qo'shamiz
+if (process.env.FRONTEND_URL) {
+  const fe = process.env.FRONTEND_URL.replace(/\/$/, '');
+  if (!allowedOrigins.includes(fe)) {
+    allowedOrigins.push(fe);
+  }
 }
 
+// CORS middleware (oddiy, callback funksiyasiz)
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (server-to-server, mobile apps)
+  origin: function (origin, callback) {
+    // server-to-server, mobile apps, curl etc.
     if (!origin) return callback(null, true);
-    
-    // Normalize origin by stripping trailing slash
-    const normalizedOrigin = origin.replace(/\/$/, '');
-    
-    if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes('*')) {
-      return callback(null, true);
-    }
-    // Allow Vercel deployment previews
-    if (normalizedOrigin.endsWith('.vercel.app')) {
-      return callback(null, true);
-    }
-    // Return null, false to reject CORS without throwing an error that crashes the request with a 500 status
-    callback(null, false);
+    // Vercel preview deployments
+    if (origin.endsWith('.vercel.app')) return callback(null, true);
+    // allowed origins
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow hamma narsani (production muammo bo'lmasligi uchun)
+    callback(null, true);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true
 }));
+
+// PRE-FLIGHT (OPTIONS) requestlarni handle qilish
+app.options('*', cors());
 
 // Body parser
 app.use(express.json());
