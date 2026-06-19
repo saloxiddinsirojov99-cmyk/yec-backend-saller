@@ -13,10 +13,9 @@ const statsRoutes = require('../routes/stats');
 
 const app = express();
 
-// CORS - allow all Vercel frontends + localhost
+// CORS - faqat ruxsat etilgan domainlar
 const allowedOrigins = [
   'https://yec-sallers.vercel.app',
-  'https://yec-saller-front.vercel.app',
   'https://yec-saller-front.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
@@ -31,20 +30,20 @@ if (process.env.FRONTEND_URL) {
   }
 }
 
-// CORS middleware (oddiy, callback funksiyasiz)
+// CORS middleware
 app.use(cors({
   origin: function (origin, callback) {
-    // server-to-server, mobile apps, curl etc.
+    // server-to-server, mobile apps, curl (origin yo'q holatlar)
     if (!origin) return callback(null, true);
-    // Vercel preview deployments
-    if (origin.endsWith('.vercel.app')) return callback(null, true);
-    // allowed origins
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    // Allow hamma narsani (production muammo bo'lmasligi uchun)
-    callback(null, true);
+    // faqat whitelistdagi domainlarga ruxsat
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    // qolgan hamma narsani bloklash
+    return callback(new Error('Not allowed by CORS'));
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
@@ -96,6 +95,10 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
+  // CORS xatoliklarini 403 qilib qaytarish
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: 'CORS: Domain ruxsat etilmagan.' });
+  }
   console.error('Express global error:', err);
   res.status(500).json({ error: 'Ichki server xatoligi yuz berdi.' });
 });
