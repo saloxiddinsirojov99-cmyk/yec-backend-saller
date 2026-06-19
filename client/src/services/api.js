@@ -3,21 +3,21 @@
 // =====================================================
 // Priority (yuqoridan pastga):
 //   1. VITE_API_URL environment variable (Vercel Settings → Environment Variables)
-//   2. Production default: https://yec-seller.vercel.app/api
+//   2. Production default: https://yec-backend-saller-xs8r.vercel.app/api
 //   3. Local development: http://localhost:5000/api
 // =====================================================
 
 const API_URL = import.meta.env.VITE_API_URL 
   || (import.meta.env.PROD 
-      ? 'https://yec-seller.vercel.app/api' 
+      ? 'https://yec-backend-saller-xs8r.vercel.app/api' 
       : 'http://localhost:5000/api');
 
 // Vercel'da o'rnatish:
-//   Frontend: https://yec-sallers.vercel.app
-//   Backend:  https://yec-seller.vercel.app
+//   Frontend: https://yec-saller-front.vercel.app
+//   Backend:  https://yec-backend-saller-xs8r.vercel.app
 //
 // Vercel Dashboard → Frontend Project → Settings → Environment Variables:
-//   VITE_API_URL = https://yec-seller.vercel.app/api
+//   VITE_API_URL = https://yec-backend-saller-xs8r.vercel.app/api
 // =====================================================
 
 function getAuthHeader() {
