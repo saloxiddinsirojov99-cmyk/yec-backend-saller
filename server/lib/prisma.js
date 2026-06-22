@@ -1,14 +1,12 @@
 const { PrismaClient } = require('@prisma/client');
-const { PrismaPg } = require('@prisma/adapter-pg');
 const logger = require('../utils/logger');
+const { isVercel } = require('../utils/config');
 
 /**
  * Prisma Client Singleton
- * 
- * - Uses global singleton for Vercel cold start optimization
- * - Configures connection pooling for Neon (serverless PostgreSQL)
- * - Implements automatic retry logic for transient failures
- * - Properly handles connection lifecycle
+ *
+ * - Vercel serverless: plain PrismaClient (adapter causes compatibility issues)
+ * - Render/local: optional pg adapter when @prisma/adapter-pg is available
  */
 
 let prisma = null;
@@ -21,39 +19,42 @@ function createPrismaClient() {
     return null;
   }
 
+  const logConfig =
+    process.env.NODE_ENV === 'production'
+      ? ['error', 'warn']
+      : ['error', 'warn', 'info'];
+
   try {
-    const adapter = new PrismaPg({
-      connectionString,
-      // Pool configuration for Neon serverless
-      pool: {
-        max: 10,              // Maximum connections in pool
-        min: 1,               // Minimum connections in pool
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
-      },
-    });
+    if (!isVercel()) {
+      try {
+        const { PrismaPg } = require('@prisma/adapter-pg');
+        const adapter = new PrismaPg({
+          connectionString,
+          pool: {
+            max: 10,
+            min: 1,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 10000,
+          },
+        });
 
-    const client = new PrismaClient({
-      adapter,
-      // Logging configuration
-      log: process.env.NODE_ENV === 'production'
-        ? ['error', 'warn']
-        : ['error', 'warn', 'info'],
-    });
+        return new PrismaClient({ adapter, log: logConfig });
+      } catch (adapterError) {
+        logger.warn('Prisma pg adapter unavailable, using default client', {
+          error: adapterError.message,
+        });
+      }
+    }
 
-    return client;
+    return new PrismaClient({ log: logConfig });
   } catch (error) {
     logger.error('Failed to create Prisma client:', { error: error.message });
     return null;
   }
 }
 
-/**
- * Get Prisma instance (singleton pattern)
- */
 function getPrisma() {
   if (!prisma) {
-    // Use global for Vercel cold start optimization
     if (global.prisma) {
       prisma = global.prisma;
     } else {
@@ -66,10 +67,6 @@ function getPrisma() {
   return prisma;
 }
 
-/**
- * Test database connectivity
- * Returns { connected: boolean, error?: string }
- */
 async function testConnection() {
   const client = getPrisma();
   if (!client) {
@@ -85,9 +82,6 @@ async function testConnection() {
   }
 }
 
-/**
- * Gracefully disconnect Prisma
- */
 async function disconnect() {
   if (prisma) {
     try {
@@ -101,7 +95,6 @@ async function disconnect() {
   }
 }
 
-// Export singleton instance
 const prismaClient = getPrisma();
 
 module.exports = prismaClient;

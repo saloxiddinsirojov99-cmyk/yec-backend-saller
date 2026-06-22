@@ -17,6 +17,8 @@ function createApp(options = {}) {
   const app = express();
 
   const allowedOrigins = [
+    'https://yec-sallers.vercel.app',
+    'https://yec-saller-front.vercel.app',
     (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, ''),
   ];
 
@@ -26,7 +28,7 @@ function createApp(options = {}) {
     allowedOrigins.push('http://127.0.0.1:5173');
   }
 
-  app.use(cors({
+  const corsOptions = {
     origin(origin, callback) {
       if (!origin) return callback(null, true);
 
@@ -48,13 +50,16 @@ function createApp(options = {}) {
         return callback(null, true);
       }
 
-      callback(null, false);
+      callback(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true,
     maxAge: 86400,
-  }));
+  };
+
+  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions));
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
