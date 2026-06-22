@@ -1,33 +1,17 @@
 {
-  "name": "yec-gilam-server",
+  "name": "yec-gilam",
+  "private": true,
   "version": "2.0.0",
-  "description": "YEC Gilam Backend API - Prisma 7 + PostgreSQL (Neon)",
-  "main": "index.js",
+  "description": "YEC Gilam monorepo - client frontend + server backend",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "start:server": "cd server && npm start",
     "build:client": "cd client && npm install && npm run build",
-    "db:push": "npx prisma db push --config=./prisma/prisma.config.ts",
-    "db:seed": "node prisma/seed.js",
-    "db:studio": "npx prisma studio",
-    "postinstall": "npx prisma generate --schema=./prisma/schema.prisma",
-    "vercel-build": "npx prisma generate --schema=./prisma/schema.prisma"
-  },
-  "prisma": {
-    "schema": "./prisma/schema.prisma"
-  },
-  "dependencies": {
-    "@prisma/adapter-pg": "^7.8.0",
-    "@prisma/client": "^7.8.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2",
-    "multer": "^2.1.1",
-    "nodemailer": "^8.0.10",
-    "pg": "^8.21.0"
-  },
-  "devDependencies": {
-    "prisma": "^7.8.0"
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "test": "cd server && npm test",
+    "db:push": "cd server && npm run db:push",
+    "db:seed": "cd server && npm run db:seed",
+    "db:generate": "cd server && npm run db:generate"
   }
 }

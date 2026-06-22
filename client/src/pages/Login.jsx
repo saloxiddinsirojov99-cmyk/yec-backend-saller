@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Container,
@@ -27,8 +27,18 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { login } = useAuth();
+  const { login, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate(user.role === 'admin' ? '/admin/dashboard' : '/seller/dashboard', { replace: true });
+    }
+  }, [authLoading, user, navigate]);
+
+  if (authLoading || user) {
+    return null;
+  }
 
   // Simple form validation state
   const [emailTouched, setEmailTouched] = useState(false);
@@ -128,7 +138,7 @@ export default function Login() {
           {/* Logo container */}
           <Box
             component="img"
-            src="/logo.png"
+            src="/logo.svg"
             alt="YEC Gilam Logo"
             onError={(e) => {
               // Fallback if logo doesn't exist yet

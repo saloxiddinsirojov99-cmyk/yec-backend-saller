@@ -2,8 +2,10 @@ node_modules/
 client/node_modules/
 server/node_modules/
 .env
+server/.env
 *.db
 dist/
+client/dist/
 .DS_Store
 *.log
 yec_gilam.db

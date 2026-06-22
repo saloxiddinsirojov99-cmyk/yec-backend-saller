@@ -68,7 +68,7 @@ export default function Layout({ children, navItems }) {
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4, px: 2 }}>
         <Box
           component="img"
-          src="/logo.png"
+          src="/logo.svg"
           alt="YEC Gilam"
           sx={{ width: 60, height: 60, mb: 1, filter: 'drop-shadow(0 2px 8px rgba(37, 99, 235, 0.4))' }}
         />
@@ -142,7 +142,7 @@ export default function Layout({ children, navItems }) {
             )}
             <Box
               component="img"
-              src="/logo.png"
+              src="/logo.svg"
               alt="YEC Gilam"
               onClick={handleLogoClick}
               sx={{

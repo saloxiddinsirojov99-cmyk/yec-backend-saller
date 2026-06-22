@@ -2,15 +2,16 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../lib/prisma');
 const { authenticateToken } = require('../middleware/auth');
+const { success, created, badRequest, notFound, forbidden, serverError } = require('../utils/response');
 
-// GET /api/orders - List orders with filtering
+// GET /api/orders
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { search, branch_id, status, unpaid, seller_id, date_from, date_to, delivery_from, delivery_to, phone, customer } = req.query;
-    
+
     const where = {};
 
-    // Role-based scoping: Seller only sees their own branch orders
+    // Role-based scoping
     if (req.user.role !== 'admin') {
       where.branch_id = req.user.branch_id || 0;
     } else if (branch_id) {
@@ -32,7 +33,7 @@ router.get('/', authenticateToken, async (req, res) => {
     if (phone) {
       where.OR = [
         { customer_phone: { contains: phone, mode: 'insensitive' } },
-        { customer_phone2: { contains: phone, mode: 'insensitive' } }
+        { customer_phone2: { contains: phone, mode: 'insensitive' } },
       ];
     }
 
@@ -52,7 +53,7 @@ router.get('/', authenticateToken, async (req, res) => {
       where.OR = [
         { customer_name: { contains: search, mode: 'insensitive' } },
         { customer_phone: { contains: search, mode: 'insensitive' } },
-        { order_number: { contains: search, mode: 'insensitive' } }
+        { order_number: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -60,33 +61,30 @@ router.get('/', authenticateToken, async (req, res) => {
       where,
       include: {
         branch: { select: { name: true } },
-        seller: { select: { name: true } }
+        seller: { select: { name: true } },
       },
-      orderBy: { id: 'desc' }
+      orderBy: { id: 'desc' },
     });
 
     let formattedOrders = orders.map(order => ({
       ...order,
       branch_name: order.branch?.name || null,
-      seller_name: order.seller?.name || null
+      seller_name: order.seller?.name || null,
     }));
 
+    // Filter unpaid after fetch
     if (unpaid === '1') {
       formattedOrders = formattedOrders.filter(o => o.paid_amount < o.total_amount);
     }
 
-    res.json({
-      success: true,
-      data: formattedOrders,
-      message: 'Buyurtmalar ro\'yxati muvaffaqiyatli yuklandi.'
-    });
+    return success(res, formattedOrders, 'Buyurtmalar ro\'yxati muvaffaqiyatli yuklandi.');
   } catch (err) {
-    console.error('List orders error:', err);
-    res.status(500).json({ success: false, message: 'Tizim xatoligi yuz berdi.' });
+    req.log?.error('List orders error:', { error: err.message });
+    return serverError(res);
   }
 });
 
-// GET /api/orders/:id - Get detailed order with items
+// GET /api/orders/:id
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -96,16 +94,17 @@ router.get('/:id', authenticateToken, async (req, res) => {
       include: {
         items: true,
         branch: true,
-        seller: true
-      }
+        seller: true,
+      },
     });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Buyurtma topilmadi.' });
+      return notFound(res, 'Buyurtma topilmadi.');
     }
 
+    // Check access
     if (req.user.role !== 'admin' && order.branch_id !== req.user.branch_id) {
-      return res.status(403).json({ success: false, message: 'Ushbu buyurtmani ko\'rishga huquqingiz yo\'q.' });
+      return forbidden(res, 'Ushbu buyurtmani ko\'rishga huquqingiz yo\'q.');
     }
 
     const formattedOrder = {
@@ -114,21 +113,17 @@ router.get('/:id', authenticateToken, async (req, res) => {
       branch_address: order.branch?.address || null,
       branch_phone: order.branch?.phone || null,
       seller_name: order.seller?.name || null,
-      order_items: order.items
+      order_items: order.items,
     };
 
-    res.json({
-      success: true,
-      data: formattedOrder,
-      message: 'Buyurtma tafsilotlari muvaffaqiyatli yuklandi.'
-    });
+    return success(res, formattedOrder, 'Buyurtma tafsilotlari muvaffaqiyatli yuklandi.');
   } catch (err) {
-    console.error('Get order error:', err);
-    res.status(500).json({ success: false, message: 'Tizim xatoligi yuz berdi.' });
+    req.log?.error('Get order error:', { error: err.message });
+    return serverError(res);
   }
 });
 
-// POST /api/orders - Create new order
+// POST /api/orders
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const {
@@ -139,26 +134,31 @@ router.post('/', authenticateToken, async (req, res) => {
       delivery_date,
       paid_amount,
       note,
-      items
+      items,
     } = req.body;
 
     if (!customer_name || !customer_phone || !delivery_date || !items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ success: false, message: 'Mijoz ma\'lumotlari, yetkazish sanasi va mahsulotlar kiritilishi shart.' });
+      return badRequest(res, 'Mijoz ma\'lumotlari, yetkazish sanasi va mahsulotlar kiritilishi shart.');
     }
 
-    let total_amount = 0;
+    // Validate items
     for (const item of items) {
       if (!item.product_name || item.quantity <= 0 || item.price < 0) {
-        return res.status(400).json({ success: false, message: 'Mahsulot ma\'lumotlari to\'g\'ri kiritilmagan.' });
+        return badRequest(res, 'Mahsulot ma\'lumotlari to\'g\'ri kiritilmagan.');
       }
+    }
+
+    // Calculate total
+    let total_amount = 0;
+    for (const item of items) {
       total_amount += item.quantity * item.price;
     }
 
     // Auto-generate order number
     const maxOrder = await prisma.order.findFirst({
-      orderBy: { id: 'desc' }
+      orderBy: { id: 'desc' },
     });
-    
+
     let nextNum = 1;
     if (maxOrder && maxOrder.order_number) {
       const match = maxOrder.order_number.match(/\d+/);
@@ -168,7 +168,7 @@ router.post('/', authenticateToken, async (req, res) => {
     }
     const finalOrderNumber = String(nextNum).padStart(3, '0');
 
-    // Insert Order with items in transaction
+    // Create order in transaction
     const result = await prisma.$transaction(async (tx) => {
       const created = await tx.order.create({
         data: {
@@ -187,7 +187,9 @@ router.post('/', authenticateToken, async (req, res) => {
           status: 'pending',
           items: {
             create: items.map(item => {
-              const itemQty = item.width && item.height ? (parseFloat(item.width) * parseFloat(item.height)) : (parseFloat(item.quantity) || 1);
+              const itemQty = item.width && item.height
+                ? (parseFloat(item.width) * parseFloat(item.height))
+                : (parseFloat(item.quantity) || 1);
               return {
                 product_id: item.product_id ? parseInt(item.product_id) : null,
                 product_name: item.product_name,
@@ -197,16 +199,16 @@ router.post('/', authenticateToken, async (req, res) => {
                 quantity: itemQty,
                 price: parseFloat(item.price),
                 discount_percent: item.discount_percent ? parseFloat(item.discount_percent) : 0,
-                note: item.note ? item.note.trim() : ''
+                note: item.note ? item.note.trim() : '',
               };
-            })
-          }
+            }),
+          },
         },
         include: {
           items: true,
           branch: true,
-          seller: true
-        }
+          seller: true,
+        },
       });
       return created;
     });
@@ -216,40 +218,37 @@ router.post('/', authenticateToken, async (req, res) => {
       branch_name: result.branch?.name || null,
       seller_name: result.seller?.name || null,
       items: result.items,
-      order_items: result.items
+      order_items: result.items,
     };
 
-    res.status(201).json({
-      success: true,
-      data: responseData,
-      message: 'Buyurtma muvaffaqiyatli yaratildi.'
-    });
+    return created(res, responseData, 'Buyurtma muvaffaqiyatli yaratildi.');
   } catch (err) {
-    console.error('Create order error:', err);
-    res.status(500).json({ success: false, message: 'Buyurtma yaratishda xatolik yuz berdi: ' + err.message });
+    req.log?.error('Create order error:', { error: err.message });
+    return serverError(res, 'Buyurtma yaratishda xatolik yuz berdi.');
   }
 });
 
-// PUT /api/orders/:id - Update order
+// PUT /api/orders/:id
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { status, paid_amount, items, customer_name, customer_phone, customer_phone2, customer_address, delivery_date, note, branch_id } = req.body;
 
     const order = await prisma.order.findUnique({
-      where: { id: parseInt(id) }
+      where: { id: parseInt(id) },
     });
-    
+
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Buyurtma topilmadi.' });
+      return notFound(res, 'Buyurtma topilmadi.');
     }
 
     if (req.user.role !== 'admin' && order.branch_id !== req.user.branch_id) {
-      return res.status(403).json({ success: false, message: 'Ushbu buyurtmani o\'zgartirishga huquqingiz yo\'q.' });
+      return forbidden(res, 'Ushbu buyurtmani o\'zgartirishga huquqingiz yo\'q.');
     }
 
     const updated = await prisma.$transaction(async (tx) => {
       const updateData = {};
+
       if (status !== undefined) updateData.status = status;
       if (paid_amount !== undefined) updateData.paid_amount = parseFloat(paid_amount);
       if (customer_name !== undefined) updateData.customer_name = customer_name;
@@ -260,24 +259,25 @@ router.put('/:id', authenticateToken, async (req, res) => {
       if (note !== undefined) updateData.note = note;
       if (branch_id !== undefined) updateData.branch_id = branch_id ? parseInt(branch_id) : null;
 
-      // If items provided, recreate them and update total_amount
       if (items && Array.isArray(items) && items.length > 0) {
         let total_amount = 0;
         for (const item of items) {
-          const qty = item.width && item.height ? (parseFloat(item.width) * parseFloat(item.height)) : (parseFloat(item.quantity) || 1);
+          const qty = item.width && item.height
+            ? (parseFloat(item.width) * parseFloat(item.height))
+            : (parseFloat(item.quantity) || 1);
           total_amount += qty * parseFloat(item.price || 0);
         }
         updateData.total_amount = total_amount;
 
-        // Delete old items
         await tx.orderItem.deleteMany({
-          where: { order_id: parseInt(id) }
+          where: { order_id: parseInt(id) },
         });
 
-        // Recreate new items
         updateData.items = {
           create: items.map(item => {
-            const itemQty = item.width && item.height ? (parseFloat(item.width) * parseFloat(item.height)) : (parseFloat(item.quantity) || 1);
+            const itemQty = item.width && item.height
+              ? (parseFloat(item.width) * parseFloat(item.height))
+              : (parseFloat(item.quantity) || 1);
             return {
               product_id: item.product_id ? parseInt(item.product_id) : null,
               product_name: item.product_name,
@@ -287,9 +287,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
               quantity: itemQty,
               price: parseFloat(item.price || 0),
               discount_percent: item.discount_percent ? parseFloat(item.discount_percent) : 0,
-              note: item.note ? item.note.trim() : ''
+              note: item.note ? item.note.trim() : '',
             };
-          })
+          }),
         };
       }
 
@@ -299,8 +299,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
         include: {
           items: true,
           branch: true,
-          seller: true
-        }
+          seller: true,
+        },
       });
     });
 
@@ -309,45 +309,41 @@ router.put('/:id', authenticateToken, async (req, res) => {
       branch_name: updated.branch?.name || null,
       seller_name: updated.seller?.name || null,
       items: updated.items,
-      order_items: updated.items
+      order_items: updated.items,
     };
 
-    res.json({
-      success: true,
-      data: responseData,
-      message: 'Buyurtma muvaffaqiyatli yangilandi.'
-    });
+    return success(res, responseData, 'Buyurtma muvaffaqiyatli yangilandi.');
   } catch (err) {
-    console.error('Update order error:', err);
-    res.status(500).json({ success: false, message: 'Tizim xatoligi yuz berdi.' });
+    req.log?.error('Update order error:', { error: err.message });
+    return serverError(res);
   }
 });
 
-// DELETE /api/orders/:id - Delete order
+// DELETE /api/orders/:id
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
     const order = await prisma.order.findUnique({
-      where: { id: parseInt(id) }
+      where: { id: parseInt(id) },
     });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Buyurtma topilmadi.' });
+      return notFound(res, 'Buyurtma topilmadi.');
     }
 
     if (req.user.role !== 'admin' && order.branch_id !== req.user.branch_id) {
-      return res.status(403).json({ success: false, message: 'Ushbu buyurtmani o\'chirishga huquqingiz yo\'q.' });
+      return forbidden(res, 'Ushbu buyurtmani o\'chirishga huquqingiz yo\'q.');
     }
 
     await prisma.order.delete({
-      where: { id: parseInt(id) }
+      where: { id: parseInt(id) },
     });
 
-    res.json({ success: true, message: 'Buyurtma o\'chirildi.' });
+    return success(res, null, 'Buyurtma o\'chirildi.');
   } catch (err) {
-    console.error('Delete order error:', err);
-    res.status(500).json({ success: false, message: 'Buyurtmani o\'chirishda xatolik yuz berdi.' });
+    req.log?.error('Delete order error:', { error: err.message });
+    return serverError(res);
   }
 });
 

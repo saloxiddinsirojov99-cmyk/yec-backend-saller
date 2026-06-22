@@ -1,63 +1,53 @@
-// =====================================================
-// API URL - YEC Gilam tizimi
-// =====================================================
-// Priority (yuqoridan pastga):
-//   1. VITE_API_URL environment variable (Vercel Settings → Environment Variables)
-//   2. Production default: https://yec-backend-saller-xs8r.vercel.app/api
-//   3. Local development: http://localhost:5000/api
-// =====================================================
+/**
+ * YEC Gilam API Service
+ * 
+ * All API calls to the backend. Handles authentication headers,
+ * error responses, and token expiry.
+ */
 
-const API_URL = import.meta.env.VITE_API_URL 
-  || (import.meta.env.PROD 
-      ? 'https://yec-backend-saller-xs8r.vercel.app/api' 
+const API_URL = import.meta.env.VITE_API_URL
+  || (import.meta.env.PROD
+      ? 'https://yec-backend-saller-xs8r.vercel.app/api'
       : 'http://localhost:5000/api');
 
-// Vercel'da o'rnatish:
-//   Frontend: https://yec-saller-front.vercel.app
-//   Backend:  https://yec-backend-saller-xs8r.vercel.app
-//
-// Vercel Dashboard → Frontend Project → Settings → Environment Variables:
-//   VITE_API_URL = https://yec-backend-saller-xs8r.vercel.app/api
-// =====================================================
-
-function getAuthHeader() {
+function getAuthHeaders() {
   const token = localStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { 'Authorization': `Bearer ${token}` })
-  };
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
 }
 
-/**
- * Token yaroqsiz bo'lsa (403) tokenni o'chirib, foydalanuvchini login page'ga qaytarish
- */
 function handleAuthError() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
-  // Agar window mavjud bo'lsa (browser) login page'ga redirect
   if (typeof window !== 'undefined') {
     window.location.href = '/login';
   }
 }
 
 async function handleResponse(response) {
-  // 403 - yaroqsiz token
   if (response.status === 403) {
     handleAuthError();
     throw new Error('Yaroqsiz token. Iltimos, qaytadan kiring.');
   }
-  
-  // 401 - login xatolik
+
   if (response.status === 401) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || errorData.error || 'Email yoki parol noto\'g\'ri.');
+  }
+
+  // Handle CORS errors (no Access-Control-Allow-Origin)
+  if (response.type === 'opaqueredirect' || response.type === 'opaque') {
+    throw new Error('CORS xatosi: Serverga ulanishda muammo yuz berdi.');
   }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || errorData.error || 'Tizim xatoligi yuz berdi.');
   }
-  
+
   const json = await response.json();
   if (json && json.success !== undefined) {
     if (!json.success) {
@@ -68,259 +58,192 @@ async function handleResponse(response) {
   return json;
 }
 
-function handleFetchError(err) {
-  if (err instanceof TypeError && err.message === 'Failed to fetch') {
-    throw new Error('Serverga ulanishda xatolik. Server ishlayotganligini tekshiring.');
-  }
-  throw err;
-}
-
-// Authentication
-export async function logoutUser() {
-  try {
-    const response = await fetch(`${API_URL}/auth/logout`, {
-      method: 'POST',
-      headers: getAuthHeader()
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
-}
+// ── Authentication ──
 
 export async function loginUser(email, password) {
   try {
     const response = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password }),
     });
     return handleResponse(response);
   } catch (err) {
-    handleFetchError(err);
+    if (err instanceof TypeError && err.message === 'Failed to fetch') {
+      throw new Error('Serverga ulanishda xatolik. Server ishlayotganligini tekshiring.');
+    }
+    throw err;
   }
 }
 
-// Products
-export async function getProducts() {
+export async function logoutUser() {
   try {
-    const response = await fetch(`${API_URL}/products`, {
-      headers: getAuthHeader()
+    const response = await fetch(`${API_URL}/auth/logout`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
     });
     return handleResponse(response);
   } catch (err) {
-    handleFetchError(err);
+    if (err instanceof TypeError && err.message === 'Failed to fetch') {
+      throw new Error('Serverga ulanishda xatolik.');
+    }
+    throw err;
   }
+}
+
+// ── Products ──
+
+export async function getProducts() {
+  const response = await fetch(`${API_URL}/products`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
 }
 
 export async function createProduct(data) {
-  try {
-    const response = await fetch(`${API_URL}/products`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/products`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
 }
 
 export async function updateProduct(id, data) {
-  try {
-    const response = await fetch(`${API_URL}/products/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeader(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/products/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
 }
 
 export async function deleteProduct(id) {
-  try {
-    const response = await fetch(`${API_URL}/products/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeader()
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/products/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
 }
 
-// Branches
+// ── Branches ──
+
 export async function getBranches() {
-  try {
-    const response = await fetch(`${API_URL}/branches`, {
-      headers: getAuthHeader()
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/branches`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
 }
 
 export async function createBranch(data) {
-  try {
-    const response = await fetch(`${API_URL}/branches`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/branches`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
 }
 
 export async function updateBranch(id, data) {
-  try {
-    const response = await fetch(`${API_URL}/branches/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeader(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/branches/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
 }
 
 export async function deleteBranch(id) {
-  try {
-    const response = await fetch(`${API_URL}/branches/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeader()
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/branches/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
 }
 
-// Orders
+// ── Orders ──
+
 export async function getOrders(filters = {}) {
-  try {
-    const params = new URLSearchParams(filters);
-    const response = await fetch(`${API_URL}/orders?${params}`, {
-      headers: getAuthHeader()
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const params = new URLSearchParams(filters);
+  const response = await fetch(`${API_URL}/orders?${params}`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
 }
 
 export async function getOrderById(id) {
-  try {
-    const response = await fetch(`${API_URL}/orders/${id}`, {
-      headers: getAuthHeader()
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/orders/${id}`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
 }
 
 export async function createOrder(data) {
-  try {
-    const response = await fetch(`${API_URL}/orders`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/orders`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
 }
 
 export async function updateOrder(id, data) {
-  try {
-    const response = await fetch(`${API_URL}/orders/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeader(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/orders/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
 }
 
 export async function deleteOrder(id) {
-  try {
-    const response = await fetch(`${API_URL}/orders/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeader()
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/orders/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
 }
 
-// Users
+// ── Users ──
+
 export async function getUsers() {
-  try {
-    const response = await fetch(`${API_URL}/users`, {
-      headers: getAuthHeader()
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/users`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
 }
 
 export async function createUser(data) {
-  try {
-    const response = await fetch(`${API_URL}/users`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/users`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
 }
 
 export async function updateUser(id, data) {
-  try {
-    const response = await fetch(`${API_URL}/users/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeader(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/users/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
 }
 
 export async function deleteUser(id) {
-  try {
-    const response = await fetch(`${API_URL}/users/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeader()
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/users/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
 }
 
-// Statistics
+// ── Statistics ──
+
 export async function getStatistics() {
-  try {
-    const response = await fetch(`${API_URL}/stats/dashboard`, {
-      headers: getAuthHeader()
-    });
-    return handleResponse(response);
-  } catch (err) {
-    handleFetchError(err);
-  }
+  const response = await fetch(`${API_URL}/stats/dashboard`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
 }

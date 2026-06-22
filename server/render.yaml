@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: yec-backend-saller
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run db:generate
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
